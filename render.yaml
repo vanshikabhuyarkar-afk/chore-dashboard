@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: chore-dashboard
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL      # Neon Postgres connection string
+        sync: false
+      - key: VAPID_PUBLIC_KEY  # from data/vapid.json
+        sync: false
+      - key: VAPID_PRIVATE_KEY # from data/vapid.json (keep secret)
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:chores@example.com

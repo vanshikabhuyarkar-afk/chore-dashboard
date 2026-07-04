@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/db.json
+data/db.json.tmp
+data/vapid.json
+*.log
+
+cloudflared.exe

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e0f13" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="stylesheet" href="/style.css" />
+  <title>Chore Dashboard</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🧹 Chores</div>
+    <div class="whoami">
+      <label for="me">I am</label>
+      <select id="me"></select>
+      <button id="notifyBtn" class="icon-btn" title="Enable notifications">🔔</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <section class="stats" id="stats"></section>
+
+    <div class="toolbar">
+      <div class="filters" id="personFilters"></div>
+      <div class="seg" id="statusFilter">
+        <button data-status="open" class="active">To do</button>
+        <button data-status="done">Done</button>
+        <button data-status="all">All</button>
+      </div>
+    </div>
+
+    <section id="choreList" class="chore-list"></section>
+
+    <button id="addBtn" class="fab" title="Add chore">＋</button>
+  </main>
+
+  <!-- Add / edit chore sheet -->
+  <div class="sheet-backdrop" id="choreSheet" hidden>
+    <form class="sheet" id="choreForm">
+      <h2 id="sheetTitle">New chore</h2>
+      <input type="hidden" id="choreId" />
+      <label>Title
+        <input id="f-title" required placeholder="e.g. Take out the trash" />
+      </label>
+      <label>Notes
+        <input id="f-notes" placeholder="optional" />
+      </label>
+      <label>Assign to
+        <select id="f-assignedTo"></select>
+      </label>
+      <div class="row">
+        <label>Due date
+          <input id="f-dueDate" type="date" />
+        </label>
+        <label>Remind at
+          <input id="f-remindTime" type="time" />
+        </label>
+      </div>
+      <p class="hint">Leave the time blank to get the default 8:00 AM reminder on the due date.</p>
+      <div class="row">
+        <label>Repeat
+          <select id="f-repeat">
+            <option value="none">Don't repeat</option>
+            <option value="day">Every … day(s)</option>
+            <option value="week">Every … week(s)</option>
+            <option value="month">Every … month(s)</option>
+          </select>
+        </label>
+        <label id="everyWrap" hidden>How many
+          <input id="f-repeatEvery" type="number" min="1" value="3" />
+        </label>
+      </div>
+      <div id="rotateWrap" hidden>
+        <label>Rotate between people (whose turn it is alternates each time)</label>
+        <div class="rotate-people" id="rotatePeople"></div>
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="ghost" id="deleteChore" hidden>Delete</button>
+        <div class="spacer"></div>
+        <button type="button" class="ghost" id="cancelChore">Cancel</button>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Manage people sheet -->
+  <div class="sheet-backdrop" id="peopleSheet" hidden>
+    <div class="sheet">
+      <h2>Family members</h2>
+      <ul id="peopleList" class="people-list"></ul>
+      <form id="personForm" class="person-form">
+        <input id="p-name" placeholder="Add a person" required />
+        <input id="p-color" type="color" value="#6366f1" />
+        <button type="submit" class="primary">Add</button>
+      </form>
+      <div class="sheet-actions">
+        <div class="spacer"></div>
+        <button type="button" class="ghost" id="closePeople">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comments / chat sheet -->
+  <div class="sheet-backdrop" id="commentSheet" hidden>
+    <div class="sheet">
+      <h2 id="commentTitle">Comments</h2>
+      <div id="commentList" class="comment-list"></div>
+      <form id="commentForm" class="comment-form">
+        <input id="c-text" placeholder="Write a message…" autocomplete="off" required />
+        <button type="submit" class="primary">Send</button>
+      </form>
+      <div class="sheet-actions">
+        <div class="spacer"></div>
+        <button type="button" class="ghost" id="closeComments">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

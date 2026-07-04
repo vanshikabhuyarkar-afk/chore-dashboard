@@ -1,0 +1,19 @@
+{
+  "name": "chore-dashboard",
+  "version": "1.0.0",
+  "description": "Family chore dashboard with assignment and Android push notifications",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "setup": "node scripts/generate-vapid.js && node scripts/make-icons.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3",
+    "pg": "^8.22.0",
+    "web-push": "^3.6.7"
+  }
+}
