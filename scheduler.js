@@ -21,6 +21,7 @@ function nowHM() {
 async function sendDueTodayReminders() {
   const today = ymd();
   const hm = nowHM();
+  let changed = false;
   for (const c of getChores()) {
     if (c.status !== 'todo' || !c.assignedTo || !c.dueDate) continue;
     if (c.dueDate !== today || c.notifiedDue === today) continue;
@@ -34,13 +35,15 @@ async function sendDueTodayReminders() {
       url: '/',
     });
     c.notifiedDue = today;
+    changed = true;
   }
-  _save();
+  if (changed) _save(); // only touch storage when we actually marked something
 }
 
 async function sendOverdueNags() {
   const today = ymd();
   const now = Date.now();
+  let changed = false;
   for (const c of getChores()) {
     if (c.status !== 'todo' || !c.assignedTo || !c.dueDate) continue;
     if (c.dueDate < today) {
@@ -54,9 +57,10 @@ async function sendOverdueNags() {
         requireInteraction: true,
       });
       c.notifiedOverdueAt = now;
+      changed = true;
     }
   }
-  _save();
+  if (changed) _save(); // only touch storage when we actually nagged
 }
 
 export function startScheduler() {

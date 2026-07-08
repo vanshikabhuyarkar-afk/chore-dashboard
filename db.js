@@ -14,6 +14,9 @@ const USE_PG = !!process.env.DATABASE_URL;
 
 let pool = null;
 let state = USE_PG ? structuredClone(EMPTY) : loadFile();
+// With Postgres we start blank and load asynchronously; block all writes until that
+// load finishes, so a stray early save can never overwrite real data with an empty state.
+let loaded = !USE_PG;
 
 // --- boot: called once from server.js before listening ---
 export async function initDb() {
@@ -38,6 +41,7 @@ export async function initDb() {
   } else {
     console.log('[db] Postgres connected, no existing state — starting fresh');
   }
+  loaded = true; // existing data (if any) is now in memory — writes are safe from here on
 }
 
 function loadFile() {
@@ -74,6 +78,7 @@ async function flushPg() {
 
 function persist() {
   if (USE_PG) {
+    if (!loaded) return; // never write before the initial load completes
     flushPg(); // fire-and-forget; queue guarantees the latest state lands
     return;
   }

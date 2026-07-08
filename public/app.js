@@ -436,9 +436,10 @@ function renderLoginPeople() {
       </button>`
     )
     .join('');
-  // Adding people from the login screen is only for the empty/bootstrap case;
-  // afterwards new members are added from inside the app (People sheet).
-  $('#loginAddPerson').hidden = true;
+  // During initial setup (nobody has a PIN yet) allow adding more people right here.
+  // Once someone has claimed a name, new members are added from inside the app.
+  const claimed = people.some((u) => u.hasPin);
+  $('#loginAddPerson').hidden = claimed;
   $('#loginAddForm').hidden = true;
 }
 

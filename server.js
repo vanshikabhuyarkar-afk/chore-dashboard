@@ -55,8 +55,10 @@ app.get('/api/state', auth, (req, res) => {
 
 // --- Users ---
 app.post('/api/users', (req, res) => {
-  // Anyone can add the very first person (bootstrap); after that you must be logged in.
-  if (db.getUsers().length > 0 && !db.verifyToken(bearer(req)))
+  // During initial setup (before anyone has claimed a name with a PIN) anyone can add
+  // family members. Once the first PIN is set, adding people requires being logged in.
+  const claimed = db.getUsers().some((u) => u.hasPin);
+  if (claimed && !db.verifyToken(bearer(req)))
     return res.status(401).json({ error: 'Please log in.' });
   const { name, color } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
