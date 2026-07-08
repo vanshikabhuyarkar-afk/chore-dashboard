@@ -1,19 +1,28 @@
 'use strict';
 
-const state = { users: [], chores: [], today: '', config: {} };
+const state = { users: [], chores: [], today: '', config: {}, roster: [] };
 const ui = {
   me: localStorage.getItem('me') || '',
+  token: localStorage.getItem('token') || '',
   personFilter: 'all',
   statusFilter: 'open',
 };
 
 const $ = (sel) => document.querySelector(sel);
 const api = async (path, method = 'GET', body) => {
+  const headers = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  if (ui.token) headers['Authorization'] = 'Bearer ' + ui.token;
   const res = await fetch('/api' + path, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+  // A stale/expired token bounces everyone back to the login screen.
+  if (res.status === 401 && path !== '/login') {
+    forceLogout();
+    throw new Error('Please log in again.');
+  }
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.json();
 };
@@ -124,19 +133,16 @@ function renderList() {
 }
 
 function render() {
-  renderMeOptions();
+  renderMeBadge();
   renderStats();
   renderPersonFilters();
   renderList();
 }
 
-function renderMeOptions() {
-  const sel = $('#me');
-  sel.innerHTML =
-    `<option value="">— pick —</option>` +
-    state.users.map((u) => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
-  if (ui.me && userById(ui.me)) sel.value = ui.me;
-  else { ui.me = ''; localStorage.removeItem('me'); }
+function renderMeBadge() {
+  const me = userById(ui.me);
+  $('#meName').textContent = me ? me.name : '';
+  $('#meDot').style.background = me ? me.color : 'var(--accent)';
   updateNotifyBtn();
 }
 
@@ -373,6 +379,135 @@ function urlB64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+// ---------- auth / login ----------
+let pendingLogin = null; // the person chosen on the login screen, awaiting their PIN
+
+async function loadRoster() {
+  state.roster = await api('/roster');
+}
+
+function clearSession() {
+  ui.token = '';
+  ui.me = '';
+  localStorage.removeItem('token');
+  localStorage.removeItem('me');
+}
+
+// Called when a token turns out to be invalid mid-session.
+function forceLogout() {
+  clearSession();
+  showLogin();
+}
+
+async function logout() {
+  clearSession();
+  $('#meMenu').hidden = true;
+  await loadRoster().catch(() => {});
+  showLogin();
+}
+
+function showApp() {
+  $('#loginScreen').hidden = true;
+  $('#whoami').hidden = false;
+}
+
+function showLogin() {
+  $('#whoami').hidden = true;
+  $('#loginScreen').hidden = false;
+  showPickStep();
+  renderLoginPeople();
+}
+
+function renderLoginPeople() {
+  const el = $('#loginPeople');
+  const people = state.roster;
+  if (!people.length) {
+    el.innerHTML = `<p class="pin-hint">No one here yet — add the first person to get started.</p>`;
+    $('#loginAddPerson').hidden = true;
+    $('#loginAddForm').hidden = false;
+    return;
+  }
+  el.innerHTML = people
+    .map(
+      (u) => `<button type="button" class="login-person" data-login="${u.id}">
+        <span class="dot" style="background:${u.color}"></span>
+        <span class="name">${esc(u.name)}</span>
+        <span class="status">${u.hasPin ? 'Enter PIN' : 'Set a PIN'}</span>
+      </button>`
+    )
+    .join('');
+  // Adding people from the login screen is only for the empty/bootstrap case;
+  // afterwards new members are added from inside the app (People sheet).
+  $('#loginAddPerson').hidden = true;
+  $('#loginAddForm').hidden = true;
+}
+
+function showPickStep() {
+  pendingLogin = null;
+  $('#pickStep').hidden = false;
+  $('#pinForm').hidden = true;
+  $('#pinInput').value = '';
+  clearPinHint();
+}
+
+function clearPinHint() {
+  $('#pinHint').textContent = '';
+  $('#pinHint').classList.remove('error');
+}
+function pinError(msg) {
+  $('#pinHint').textContent = msg;
+  $('#pinHint').classList.add('error');
+}
+
+function selectLoginPerson(id) {
+  const u = state.roster.find((p) => p.id === id);
+  if (!u) return;
+  pendingLogin = u;
+  $('#pickStep').hidden = true;
+  $('#pinForm').hidden = false;
+  $('#pinName').textContent = u.name;
+  $('#pinDot').style.background = u.color;
+  $('#pinPrompt').textContent = u.hasPin ? 'Enter your PIN' : 'Create a PIN';
+  $('#pinInput').value = '';
+  clearPinHint();
+  if (!u.hasPin) $('#pinHint').textContent = "Pick 4–8 numbers you'll remember.";
+  setTimeout(() => $('#pinInput').focus(), 60);
+}
+
+async function submitPin(e) {
+  e.preventDefault();
+  if (!pendingLogin) return;
+  const pin = $('#pinInput').value.trim();
+  if (!/^\d{4,8}$/.test(pin)) return pinError('PIN must be 4–8 numbers.');
+  try {
+    const { token, userId } = await api('/login', 'POST', { userId: pendingLogin.id, pin });
+    ui.token = token;
+    ui.me = userId;
+    localStorage.setItem('token', token);
+    localStorage.setItem('me', userId);
+    showApp();
+    await refresh();
+    toast('Welcome, ' + (userById(ui.me)?.name || 'you') + ' 👋');
+  } catch (err) {
+    pinError(err.message || 'Login failed.');
+    $('#pinInput').select();
+  }
+}
+
+async function loginAddPerson(e) {
+  e.preventDefault();
+  const name = $('#login-add-name').value.trim();
+  if (!name) return;
+  try {
+    await api('/users', 'POST', { name, color: $('#login-add-color').value });
+    $('#login-add-name').value = '';
+    await loadRoster();
+    renderLoginPeople();
+  } catch (err) {
+    toast('Error: ' + err.message);
+  }
+}
+
 // ---------- wiring ----------
 function init() {
   document.body.addEventListener('click', (e) => {
@@ -395,12 +530,23 @@ function init() {
     renderList();
   });
 
-  $('#me').addEventListener('change', (e) => {
-    ui.me = e.target.value;
-    if (ui.me) localStorage.setItem('me', ui.me);
-    else localStorage.removeItem('me');
-    updateNotifyBtn();
+  // Login screen
+  $('#loginPeople').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-login]');
+    if (b) selectLoginPerson(b.dataset.login);
   });
+  $('#pinForm').addEventListener('submit', submitPin);
+  $('#pinBack').addEventListener('click', showPickStep);
+  $('#pinInput').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); });
+  $('#loginAddForm').addEventListener('submit', loginAddPerson);
+
+  // Logged-in badge menu (top right)
+  $('#meBadge').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#meMenu').hidden = !$('#meMenu').hidden;
+  });
+  $('#logoutBtn').addEventListener('click', logout);
+  document.addEventListener('click', () => { $('#meMenu').hidden = true; });
 
   $('#notifyBtn').addEventListener('click', enableNotifications);
   $('#addBtn').addEventListener('click', () => openChoreSheet(null));
@@ -425,8 +571,17 @@ async function boot() {
   try {
     state.config = await api('/config');
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-    await refresh();
-    if (!state.users.length) openPeople();
+    await loadRoster();
+    if (ui.token) {
+      try {
+        await refresh(); // token still good → straight into the app
+        showApp();
+        return;
+      } catch (_) {
+        clearSession(); // token no longer valid → fall through to the login screen
+      }
+    }
+    showLogin();
   } catch (err) {
     toast('Could not load: ' + err.message);
   }

@@ -12,10 +12,14 @@
 <body>
   <header class="topbar">
     <div class="brand">🧹 Chores</div>
-    <div class="whoami">
-      <label for="me">I am</label>
-      <select id="me"></select>
+    <div class="whoami" id="whoami" hidden>
       <button id="notifyBtn" class="icon-btn" title="Enable notifications">🔔</button>
+      <button id="meBadge" class="me-badge" title="Log out / switch person">
+        <span class="dot" id="meDot"></span><span id="meName"></span> ▾
+      </button>
+      <div class="me-menu" id="meMenu" hidden>
+        <button id="logoutBtn">Log out</button>
+      </div>
     </div>
   </header>
 
@@ -115,6 +119,33 @@
         <div class="spacer"></div>
         <button type="button" class="ghost" id="closeComments">Close</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Login screen -->
+  <div class="login" id="loginScreen" hidden>
+    <div class="login-card">
+      <div class="login-brand">🧹 Chores</div>
+
+      <div id="pickStep">
+        <h2>Who are you?</h2>
+        <div class="login-people" id="loginPeople"></div>
+        <button type="button" class="ghost add-person-link" id="loginAddPerson" hidden>＋ Add a person</button>
+        <form class="login-add" id="loginAddForm" hidden>
+          <input id="login-add-name" placeholder="Your name" autocomplete="off" />
+          <input id="login-add-color" type="color" value="#f59e0b" />
+          <button type="submit" class="primary">Add</button>
+        </form>
+      </div>
+
+      <form class="login-pin" id="pinForm" hidden>
+        <button type="button" class="back" id="pinBack">‹ Back</button>
+        <div class="pin-who"><span class="dot" id="pinDot"></span><span id="pinName"></span></div>
+        <p class="pin-prompt" id="pinPrompt">Enter your PIN</p>
+        <input id="pinInput" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="••••" />
+        <p class="pin-hint" id="pinHint"></p>
+        <button type="submit" class="primary" id="pinSubmit">Log in</button>
+      </form>
     </div>
   </div>
 

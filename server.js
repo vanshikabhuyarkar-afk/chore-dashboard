@@ -13,44 +13,78 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
+// Pull the login token off a request (Authorization header, or token in the body).
+function bearer(req) {
+  const header = req.headers.authorization || '';
+  return header.startsWith('Bearer ') ? header.slice(7) : (req.body && req.body.token);
+}
+
+// Require a valid login token; sets req.userId to the signed-in person.
+function auth(req, res, next) {
+  const userId = db.verifyToken(bearer(req));
+  if (!userId) return res.status(401).json({ error: 'Please log in.' });
+  req.userId = userId;
+  next();
+}
+
 // --- Config / bootstrap ---
 app.get('/api/config', (req, res) => {
   res.json({ vapidPublicKey: getPublicKey(), pushConfigured: isConfigured() });
 });
 
-app.get('/api/state', (req, res) => {
+// Public roster for the login screen: just names, colors, and whether a PIN is set.
+app.get('/api/roster', (req, res) => {
+  res.json(db.getUsers().map((u) => ({ id: u.id, name: u.name, color: u.color, hasPin: u.hasPin })));
+});
+
+// Log in with a name + PIN. First time a person logs in, the PIN they type becomes their PIN.
+app.post('/api/login', (req, res) => {
+  const { userId, pin } = req.body || {};
+  if (!userId || !/^\d{4,8}$/.test(String(pin || '')))
+    return res.status(400).json({ error: 'Enter a PIN of 4–8 digits.' });
+  if (!db.getUserRaw(userId)) return res.status(404).json({ error: 'Unknown person.' });
+  if (!db.userHasPin(userId)) db.setPin(userId, pin); // first login sets the PIN
+  else if (!db.verifyPin(userId, pin)) return res.status(401).json({ error: 'Wrong PIN.' });
+  res.json({ token: db.makeToken(userId), userId });
+});
+
+// Everything below needs a valid login.
+app.get('/api/state', auth, (req, res) => {
   res.json({ users: db.getUsers(), chores: db.getChores(), today: ymd() });
 });
 
 // --- Users ---
 app.post('/api/users', (req, res) => {
+  // Anyone can add the very first person (bootstrap); after that you must be logged in.
+  if (db.getUsers().length > 0 && !db.verifyToken(bearer(req)))
+    return res.status(401).json({ error: 'Please log in.' });
   const { name, color } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
   res.json(db.addUser({ name, color: color || '#6366f1' }));
 });
 
-app.delete('/api/users/:id', (req, res) => {
+app.delete('/api/users/:id', auth, (req, res) => {
   db.removeUser(req.params.id);
   res.json({ ok: true });
 });
 
 // --- Push subscriptions ---
-app.post('/api/subscribe', (req, res) => {
-  const { userId, subscription } = req.body || {};
-  if (!userId || !subscription) return res.status(400).json({ error: 'userId and subscription required' });
-  const ok = db.saveSubscription(userId, subscription);
+app.post('/api/subscribe', auth, (req, res) => {
+  const { subscription } = req.body || {};
+  if (!subscription) return res.status(400).json({ error: 'subscription required' });
+  const ok = db.saveSubscription(req.userId, subscription);
   if (!ok) return res.status(404).json({ error: 'unknown user' });
   res.json({ ok: true });
 });
 
-app.post('/api/unsubscribe', (req, res) => {
-  const { userId, endpoint } = req.body || {};
-  db.removeSubscription(userId, endpoint);
+app.post('/api/unsubscribe', auth, (req, res) => {
+  const { endpoint } = req.body || {};
+  db.removeSubscription(req.userId, endpoint);
   res.json({ ok: true });
 });
 
-app.post('/api/test-notification', async (req, res) => {
-  const { userId } = req.body || {};
+app.post('/api/test-notification', auth, async (req, res) => {
+  const userId = req.userId;
   await notifyUser(userId, {
     title: '🔔 Test notification',
     body: 'Notifications are working! You will get pinged about your chores.',
@@ -61,9 +95,9 @@ app.post('/api/test-notification', async (req, res) => {
 });
 
 // --- Chores ---
-app.post('/api/chores', async (req, res) => {
-  const { title, notes, assignedTo, dueDate, repeat, repeatEvery, rotation, remindTime, actingUserId } =
-    req.body || {};
+app.post('/api/chores', auth, async (req, res) => {
+  const { title, notes, assignedTo, dueDate, repeat, repeatEvery, rotation, remindTime } = req.body || {};
+  const actingUserId = req.userId;
   if (!title || !title.trim()) return res.status(400).json({ error: 'title required' });
   const chore = db.addChore({ title, notes, assignedTo, dueDate, repeat, repeatEvery, rotation, remindTime });
 
@@ -79,10 +113,11 @@ app.post('/api/chores', async (req, res) => {
   res.json(chore);
 });
 
-app.patch('/api/chores/:id', async (req, res) => {
+app.patch('/api/chores/:id', auth, async (req, res) => {
   const existing = db.getChoreRaw(req.params.id);
   if (!existing) return res.status(404).json({ error: 'not found' });
-  const { actingUserId, ...patch } = req.body || {};
+  const { actingUserId: _ignored, token: _t, ...patch } = req.body || {};
+  const actingUserId = req.userId;
 
   const wasAssignedTo = existing.assignedTo;
   const wasStatus = existing.status;
@@ -164,16 +199,17 @@ app.patch('/api/chores/:id', async (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/chores/:id', (req, res) => {
+app.delete('/api/chores/:id', auth, (req, res) => {
   db.removeChore(req.params.id);
   res.json({ ok: true });
 });
 
 // --- Comments / chat on a chore ---
-app.post('/api/chores/:id/comments', async (req, res) => {
+app.post('/api/chores/:id/comments', auth, async (req, res) => {
   const chore = db.getChoreRaw(req.params.id);
   if (!chore) return res.status(404).json({ error: 'not found' });
-  const { userId, text } = req.body || {};
+  const { text } = req.body || {};
+  const userId = req.userId;
   if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
 
   const comment = db.addComment(chore.id, userId, text);
@@ -198,7 +234,7 @@ app.post('/api/chores/:id/comments', async (req, res) => {
 });
 
 // Manually trigger the reminder checks (handy for testing).
-app.post('/api/run-checks', async (req, res) => {
+app.post('/api/run-checks', auth, async (req, res) => {
   await runChecksNow();
   res.json({ ok: true });
 });

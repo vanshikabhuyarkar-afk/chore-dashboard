@@ -5,6 +5,7 @@
 //   flushed back on every change, keeping all the getters/setters synchronous.
 import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import crypto from 'node:crypto';
 import pg from 'pg';
 
 const DB_PATH = new URL('./data/db.json', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
@@ -28,7 +29,11 @@ export async function initDb() {
   await pool.query('CREATE TABLE IF NOT EXISTS app_state (id text PRIMARY KEY, data jsonb NOT NULL)');
   const { rows } = await pool.query("SELECT data FROM app_state WHERE id = 'state'");
   if (rows[0]?.data) {
-    state = { users: rows[0].data.users ?? [], chores: rows[0].data.chores ?? [] };
+    state = {
+      users: rows[0].data.users ?? [],
+      chores: rows[0].data.chores ?? [],
+      authSecret: rows[0].data.authSecret, // keep the login-signing key stable across restarts
+    };
     console.log(`[db] loaded from Postgres: ${state.users.length} users, ${state.chores.length} chores`);
   } else {
     console.log('[db] Postgres connected, no existing state — starting fresh');
@@ -39,7 +44,7 @@ function loadFile() {
   try {
     if (existsSync(DB_PATH)) {
       const parsed = JSON.parse(readFileSync(DB_PATH, 'utf8'));
-      return { users: parsed.users ?? [], chores: parsed.chores ?? [] };
+      return { users: parsed.users ?? [], chores: parsed.chores ?? [], authSecret: parsed.authSecret };
     }
   } catch (err) {
     console.error('Could not read db.json, starting empty:', err.message);
@@ -81,8 +86,12 @@ function persist() {
 
 // --- Users ---
 export function getUsers() {
-  // never leak push subscriptions to the client
-  return state.users.map(({ subscriptions, ...u }) => ({ ...u, devices: (subscriptions ?? []).length }));
+  // never leak push subscriptions or PIN hashes to the client
+  return state.users.map(({ subscriptions, pinHash, pinSalt, ...u }) => ({
+    ...u,
+    devices: (subscriptions ?? []).length,
+    hasPin: !!pinHash,
+  }));
 }
 export function getUserRaw(id) {
   return state.users.find((u) => u.id === id);
@@ -179,6 +188,64 @@ export function addComment(choreId, userId, text) {
   chore.comments.push(comment);
   persist();
   return comment;
+}
+
+// --- PIN login ---
+// PINs are stored only as a salted scrypt hash, never in plain text.
+export function userHasPin(id) {
+  const u = getUserRaw(id);
+  return !!(u && u.pinHash);
+}
+export function setPin(id, pin) {
+  const user = getUserRaw(id);
+  if (!user) return false;
+  const salt = crypto.randomBytes(16).toString('hex');
+  user.pinSalt = salt;
+  user.pinHash = crypto.scryptSync(String(pin), salt, 32).toString('hex');
+  persist();
+  return true;
+}
+export function verifyPin(id, pin) {
+  const user = getUserRaw(id);
+  if (!user || !user.pinHash) return false;
+  const hash = crypto.scryptSync(String(pin), user.pinSalt, 32).toString('hex');
+  const a = Buffer.from(hash, 'hex');
+  const b = Buffer.from(user.pinHash, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+export function clearPin(id) {
+  const user = getUserRaw(id);
+  if (!user) return false;
+  delete user.pinHash;
+  delete user.pinSalt;
+  persist();
+  return true;
+}
+
+// Stateless login tokens: HMAC(userId) with a server secret kept in the DB,
+// so tokens stay valid across restarts (no server-side session store needed).
+function getAuthSecret() {
+  if (!state.authSecret) {
+    state.authSecret = crypto.randomBytes(32).toString('hex');
+    persist();
+  }
+  return state.authSecret;
+}
+export function makeToken(id) {
+  const sig = crypto.createHmac('sha256', getAuthSecret()).update(id).digest('hex');
+  return `${id}.${sig}`;
+}
+export function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const dot = token.lastIndexOf('.');
+  if (dot < 0) return null;
+  const id = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = crypto.createHmac('sha256', getAuthSecret()).update(id).digest('hex');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return getUserRaw(id) ? id : null;
 }
 
 export function _save() {

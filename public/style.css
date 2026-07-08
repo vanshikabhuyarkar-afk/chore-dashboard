@@ -47,8 +47,75 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .brand { font-weight: 700; font-size: 1.18rem; letter-spacing: .2px; }
-.whoami { display: flex; align-items: center; gap: 8px; }
-.whoami label { color: var(--muted); font-size: .82rem; }
+.whoami { display: flex; align-items: center; gap: 8px; position: relative; }
+.whoami[hidden] { display: none; }
+.me-badge {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  color: var(--text); border-radius: 999px; padding: 8px 13px; font: inherit; font-size: .85rem;
+}
+.me-badge .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.me-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 25;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 6px; min-width: 140px;
+}
+.me-menu[hidden] { display: none; }
+.me-menu button {
+  width: 100%; text-align: left; background: none; border: none; color: var(--text);
+  padding: 10px 12px; border-radius: 9px; font: inherit; cursor: pointer;
+}
+.me-menu button:hover { background: var(--surface-3); }
+
+/* ---------- login screen ---------- */
+.login {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  padding: 22px; padding-top: calc(22px + env(safe-area-inset-top));
+  background:
+    radial-gradient(1100px 520px at 50% -180px, var(--bg-top), transparent 70%),
+    var(--bg);
+}
+.login[hidden] { display: none; }
+.login-card {
+  width: 100%; max-width: 420px;
+  background: linear-gradient(180deg, #33303b, var(--surface));
+  border: 1px solid var(--line); border-radius: 24px; padding: 28px 24px;
+  box-shadow: var(--shadow); animation: slideup .24s cubic-bezier(.2, .8, .2, 1);
+}
+.login-brand { font-size: 1.4rem; font-weight: 700; text-align: center; margin-bottom: 4px; }
+.login-card h2 { margin: 14px 0 16px; font-size: 1.15rem; text-align: center; font-weight: 650; }
+.login-people { display: flex; flex-direction: column; gap: 10px; }
+.login-person {
+  display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); padding: 14px 16px; font: inherit; font-size: 1rem; color: var(--text);
+  transition: .15s;
+}
+.login-person:hover { border-color: var(--accent); }
+.login-person .dot { width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto; }
+.login-person .name { flex: 1; font-weight: 600; }
+.login-person .status { color: var(--muted); font-size: .76rem; }
+.add-person-link { width: 100%; margin-top: 12px; }
+.login-add { display: flex; gap: 8px; margin-top: 12px; }
+.login-add #login-add-name { flex: 1; }
+.login-add[hidden] { display: none; }
+
+.login-pin { display: flex; flex-direction: column; gap: 12px; }
+.login-pin[hidden] { display: none; }
+.login-pin .back {
+  align-self: flex-start; background: none; border: none; color: var(--muted);
+  font: inherit; cursor: pointer; padding: 0; margin-bottom: 2px;
+}
+.pin-who { display: flex; align-items: center; gap: 10px; justify-content: center; font-weight: 650; font-size: 1.1rem; }
+.pin-who .dot { width: 16px; height: 16px; border-radius: 50%; }
+.pin-prompt { text-align: center; color: var(--muted); margin: 2px 0; font-size: .9rem; }
+#pinInput {
+  text-align: center; font-size: 1.8rem; letter-spacing: .5em; padding: 14px 12px;
+  text-indent: .5em; /* keep the letter-spacing visually centered */
+}
+.pin-hint { text-align: center; color: var(--muted); font-size: .78rem; margin: 0; min-height: 1em; }
+.pin-hint.error { color: var(--warn); }
+#pinSubmit { width: 100%; }
 
 select, input {
   font: inherit; color: var(--text);
